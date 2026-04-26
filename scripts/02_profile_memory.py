@@ -1,3 +1,11 @@
+import sys
+from pathlib import Path
+
+# Repo root on sys.path for `from src...` when this file is run directly.
+_ROOT = Path(__file__).resolve().parent.parent
+if str(_ROOT) not in sys.path:
+    sys.path.insert(0, str(_ROOT))
+
 import torch
 import matplotlib.pyplot as plt
 from src.cache.preallocated_kv import PreAllocatedKVCache
