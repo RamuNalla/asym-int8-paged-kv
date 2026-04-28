@@ -33,8 +33,10 @@ Standard autoregressive generation (without caching) recalculates the entire seq
 
 ![Autoregressive Generation Latency: Recompute vs Standard KV-Cache](assets/stage1_baseline_latency.png)
 
-* **Baseline (No Cache):** Averages ~65.29ms per token, but suffers catastrophic OS-level memory allocation stalls (e.g., a 7000ms freeze at step 520 to defragment VRAM).
-* **Cached ($O(n)$):** Bypasses the growing attention grid, reducing latency by 10x to a stable **~6.20ms per token**.
+| Configuration | Avg. latency | Notes |
+| --- | --- | --- |
+| Baseline (no cache) | ~65.29 ms/token | Severe OS-level allocation stalls (e.g. ~7000 ms freeze at step 520 to defragment VRAM). |
+| Cached ($O(n)$ KV) | **~6.20 ms/token** | ~10× lower; avoids the growing full-sequence recomputation grid. |
 
 ### 2. The Capacity Bottleneck: Eliminating VRAM Fragmentation
 
@@ -42,8 +44,10 @@ To avoid the dynamic allocation stalls seen above, naive engines pre-allocate co
 
 ![Memory Fragmentation in Pre-Allocated KV Caches](assets/stage2_fragmentation_report.png)
 
-* **Pre-Allocated Contiguous Cache:** Traps unused memory. Over a 2048-token generation lifecycle, **~50% of reserved VRAM is completely wasted** (the red shaded area). For sequences that terminate early, this waste can exceed 90%.
-* **Paged KV Solution:** By allocating memory in fixed-size pages (e.g., blocks of 16 tokens) mapped via a block table, the engine strictly allocates VRAM as needed. The "Allocated" ceiling hugs the "Actually Used" baseline, bringing VRAM waste effectively to 0%.
+| Approach | VRAM utilization |
+| --- | --- |
+| Pre-allocated contiguous cache | Unused tail is trapped: **~50%** of reserved VRAM wasted over a 2048-token run (see plot); early-terminated sequences can exceed **90%** waste. |
+| Paged KV (e.g. 16-token blocks + block table) | Allocates as needed; “allocated” tracks “actually used”; **~0%** waste from over-reservation. |
 
 ### 3. The Bandwidth Bottleneck: Roofline Analysis & Asymmetric INT8
 
@@ -51,19 +55,23 @@ Moving data from High Bandwidth Memory (HBM) to the compute cores (SRAM) is the 
 
 ![Roofline Analysis: Shifting the Memory Bottleneck](assets/stage4_roofline.png)
 
-**Memory Compression & Accuracy Trade-off:**
+**Memory compression and accuracy (WikiText-2 perplexity):**
 
-By applying Per-Channel scaling to Keys and Per-Token scaling to Values, we compressed the cache footprint by 4x while preserving the attention distribution mathematically.
+Per-Channel scaling on keys and Per-Token scaling on values yields **4×** smaller KV footprint while keeping attention behavior close to full precision.
 
-* **Standard (FP32):** 8 bytes per token | Perplexity (WikiText-2): **11.59**
-* **Asymmetric (INT8):** 2 bytes per token | Perplexity (WikiText-2): **12.55**
+| Precision | KV memory (per token) | Perplexity (WikiText-2) |
+| --- | --- | --- |
+| FP32 | 8 bytes | **11.59** |
+| Asymmetric INT8 | 2 bytes | **12.55** |
 
-**Hardware Execution Speedup (T4 GPU):**
+**Decode latency on T4:**
 
-Despite the added compute required to dequantize the INT8 integers on the fly, reducing the memory traffic by 4x resulted in a massive latency drop, moving the kernel closer to the theoretical compute bound.
+Less data moved from HBM despite on-the-fly dequantization; the kernel spends less time memory-bound.
 
-* **FP32 Latency:** 8.5 ms/token
-* **INT8 Latency:** **3.2 ms/token (2.6x Speedup)**
+| Precision | Latency |
+| --- | --- |
+| FP32 | 8.5 ms/token |
+| INT8 | **3.2 ms/token** (**2.6×** faster vs FP32) |
 
 ---
 
