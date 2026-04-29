@@ -2,7 +2,7 @@
 
 A custom LLM inference engine built in PyTorch and Triton, designed to systematically profile and eliminate the compute, memory capacity, and memory bandwidth bottlenecks inherent in autoregressive transformer decoding.
 
-This repository demonstrates the progression from standard contiguous memory allocation to an OS-style Paged Memory Manager (PagedAttention), culminating in a custom Triton kernel that fuses the attention mechanism with asymmetric INT8 quantization.
+This repository demonstrates the progression from standard contiguous memory allocation to an OS-style Paged Memory Manager (PagedAttention), along with a custom Triton kernel that fuses the attention mechanism with asymmetric INT8 quantization.
 
 ## The Architecture
 
